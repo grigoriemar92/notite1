@@ -1,0 +1,1 @@
+•	Cerință: o aplicație ASP.NET Core (C#, .NET 8, minimal API) cu cele 4 puncte de acces de mai sus; driverul Npgsql cu versiune fixată; un proiect de teste xUnit cu un test pentru /health care nu are nevoie de baza de date, plus un test pentru validarea textului.

@@ -1,0 +1,24 @@
+services:                                   # lista serviciilor (containerelor)
+  db:                                       # serviciul bazei de date; numele „db” devine gazda în rețeaua Compose
+    image: postgres:16                      # imaginea oficială PostgreSQL
+    environment:                            # variabile de mediu pentru container
+      POSTGRES_PASSWORD: ${DB_PASSWORD}     # parola vine din fișierul .env (nu e scrisă aici)
+      POSTGRES_DB: notite                   # creează baza „notite”, cum cere aplicația
+    volumes:
+      - datele:/var/lib/postgresql/data     # datele rămân în volumul „datele” și după down
+    healthcheck:                            # cum află Compose că baza e gata
+      test: ["CMD-SHELL", "pg_isready -U postgres -d notite"]   # comanda de verificare
+      interval: 3s                          # o rulează la fiecare 3 secunde
+      timeout: 3s                           # așteaptă cel mult 3 secunde răspunsul
+      retries: 10                           # după 10 eșecuri consecutive, serviciul e „unhealthy”
+  app:                                      # serviciul aplicației
+    build: .                                # construiește imaginea din Dockerfile-ul din folderul curent
+    ports:
+      - "8000:8000"                         # portul 8000 al calculatorului duce în 8000 din container
+    environment:
+      ConnectionStrings__Notes: "Host=db;Port=5432;Database=notite;Username=postgres;Password=${DB_PASSWORD}"   # șirul de conexiune: gazda e „db”, nu localhost
+    depends_on:
+      db:
+        condition: service_healthy          # pornește aplicația abia când baza a trecut verificarea
+volumes:
+  datele:                                   # declară volumul cu nume
