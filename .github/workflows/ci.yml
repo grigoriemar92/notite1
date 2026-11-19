@@ -1,0 +1,38 @@
+name: CI                                    # numele workflow-ului (apare în fila Actions)
+on:                                         # când rulează
+  push:
+    branches: [main]                        # la fiecare push pe main
+  pull_request:                             # și la fiecare pull request
+permissions:                                # drepturile jetonului GITHUB_TOKEN
+  contents: read                            # poate citi codul
+  packages: write                           # poate publica pachete (imaginea) în GHCR
+jobs:
+  test:                                     # jobul 1: testele
+    runs-on: ubuntu-latest                  # mașina virtuală GitHub pe care rulează
+    steps:
+      - uses: actions/checkout@v4           # aduce codul repo-ului pe mașină
+      - uses: actions/setup-dotnet@v4       # instalează SDK-ul .NET
+        with:
+          dotnet-version: "8.0.x"           # versiunea cerută (ultima 8.0)
+      - run: dotnet test                    # găsește Notite.sln în rădăcină și rulează testele; un test picat oprește workflow-ul
+  imagine:                                  # jobul 2: construiește și publică imaginea
+    needs: test                             # rulează doar dacă „test” a reușit
+    if: github.event_name == 'push'         # doar la push (nu la pull request)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3        # autentificare în registry
+        with:
+          registry: ghcr.io                 # registry-ul GitHub
+          username: ${{ github.actor }}     # utilizatorul care a făcut push
+          password: ${{ secrets.GITHUB_TOKEN }}   # jeton generat automat; nu scrii nicio parolă
+      - id: meta
+        uses: docker/metadata-action@v5     # calculează numele și tag-urile imaginii
+        with:
+          images: ghcr.io/${{ github.repository }}   # ghcr.io/grigoriemar92/notite1 (litere mici, automat)
+          tags: type=sha                    # tag bazat pe commit, de forma sha-abc1234
+      - uses: docker/build-push-action@v6   # construiește și publică imaginea
+        with:
+          context: .                        # folderul cu Dockerfile
+          push: true                        # publică în registry
+          tags: ${{ steps.meta.outputs.tags }}   # tag-urile calculate mai sus
