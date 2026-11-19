@@ -1,0 +1,53 @@
+- name: Deploy notite în clusterul Kubernetes   # numele playbook-ului
+  hosts: localhost                              # rulează pe calculatorul tău (clusterul kind e local)
+  connection: local                             # fără SSH
+  gather_facts: false                           # nu colecta informații despre mașină (nu ai nevoie)
+  vars:
+    k8s_namespace: notite                           # namespace-ul în care lucrezi
+    versiune: "1.0"                             # versiunea afișată de /health (poate fi suprascrisă cu -e)
+  tasks:
+    - name: Verific că variabilele obligatorii au fost date
+      ansible.builtin.assert:                   # oprește playbook-ul dacă condiția nu e adevărată
+        that:
+          - imagine is defined
+          - parola is defined
+          - ghcr_token is defined
+        fail_msg: "Dă -e imagine=... -e parola=... -e ghcr_token=..."
+
+    - name: Creez namespace-ul (fără eroare dacă există)
+      ansible.builtin.shell: kubectl create namespace {{ k8s_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+      register: ns                              # salvează rezultatul comenzii
+      changed_when: "'created' in ns.stdout"    # „changed” doar dacă a fost creat acum
+
+    - name: Creez sau actualizez Secret-ul cu parola bazei
+      ansible.builtin.shell: kubectl create secret generic db-secret -n {{ k8s_namespace }} --from-literal=DB_PASSWORD="$PAROLA" --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        PAROLA: "{{ parola }}"                  # parola trece prin variabilă de mediu, nu prin linia de comandă
+      no_log: true                              # nu afișa parola în ieșire
+      changed_when: false
+
+    - name: Creez sau actualizez Secret-ul pentru registry
+      ansible.builtin.shell: kubectl create secret docker-registry ghcr-secret -n {{ k8s_namespace }} --docker-server=ghcr.io --docker-username=grigoriemar92 --docker-password="$TOKEN" --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        TOKEN: "{{ ghcr_token }}"
+      no_log: true
+      changed_when: false
+
+    - name: Aplic baza de date
+      ansible.builtin.command: kubectl apply -n {{ k8s_namespace }} -f {{ playbook_dir }}/k8s/db.yaml
+      register: db
+      changed_when: "'unchanged' not in db.stdout"
+
+    - name: Randez manifestul aplicației cu imaginea dorită
+      ansible.builtin.template:
+        src: k8s/app.yaml.j2                    # șablonul
+        dest: /tmp/notite-app.yaml              # fișierul rezultat, cu valorile înlocuite
+
+    - name: Aplic aplicația
+      ansible.builtin.command: kubectl apply -n {{ k8s_namespace }} -f /tmp/notite-app.yaml
+      register: app
+      changed_when: "'unchanged' not in app.stdout"
+
+    - name: Aștept ca aplicația să fie gata
+      ansible.builtin.command: kubectl rollout status deployment/notite -n {{ k8s_namespace }} --timeout=120s
+      changed_when: false

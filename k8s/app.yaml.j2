@@ -16,7 +16,7 @@ spec:
         - name: ghcr-secret                 # datele de autentificare pentru imaginea privată din GHCR
       containers:
         - name: notite
-          image: ghcr.io/grigoriemar92/notite1:sha-472b756   # imaginea construită de GitHub Actions
+          image: "{{ imagine }}"   # imaginea construită de GitHub Actions
           ports:
             - containerPort: 8000           # portul aplicației
           env:
@@ -28,7 +28,7 @@ spec:
             - name: ConnectionStrings__Notes   # apoi șirul de conexiune, care o folosește pe cea de mai sus
               value: "Host=db;Port=5432;Database=notite;Username=postgres;Password=$(DB_PASSWORD)"   # $(DB_PASSWORD) = Kubernetes o înlocuiește cu valoarea variabilei definite ÎNAINTE în această listă
             - name: VERSIUNE
-              value: "1.0"                  # versiunea afișată de /health
+              value: "{{ versiune }}"                  # versiunea afișată de /health
           readinessProbe:                   # când e gata să primească trafic
             httpGet:
               path: /ready                  # verifică și conexiunea la bază
