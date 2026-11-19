@@ -1,0 +1,61 @@
+apiVersion: apps/v1                         # versiunea API pentru Deployment
+kind: Deployment                            # menține Pod-urile aplicației pornite
+metadata:
+  name: notite
+spec:
+  replicas: 2                               # două instanțe ale aplicației
+  selector:
+    matchLabels:
+      app: notite                           # gestionează Pod-urile cu eticheta app=notite
+  template:                                 # șablonul Pod-urilor
+    metadata:
+      labels:
+        app: notite                         # eticheta Pod-ului (trebuie să se potrivească cu selector)
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret                 # datele de autentificare pentru imaginea privată din GHCR
+      containers:
+        - name: notite
+          image: ghcr.io/grigoriemar92/notite1:sha-472b756   # imaginea construită de GitHub Actions
+          ports:
+            - containerPort: 8000           # portul aplicației
+          env:
+            - name: DB_PASSWORD             # întâi parola, din Secret
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASSWORD
+            - name: ConnectionStrings__Notes   # apoi șirul de conexiune, care o folosește pe cea de mai sus
+              value: "Host=db;Port=5432;Database=notite;Username=postgres;Password=$(DB_PASSWORD)"   # $(DB_PASSWORD) = Kubernetes o înlocuiește cu valoarea variabilei definite ÎNAINTE în această listă
+            - name: VERSIUNE
+              value: "1.0"                  # versiunea afișată de /health
+          readinessProbe:                   # când e gata să primească trafic
+            httpGet:
+              path: /ready                  # verifică și conexiunea la bază
+              port: 8000
+            initialDelaySeconds: 3          # prima verificare după 3 secunde
+            periodSeconds: 5                # apoi la fiecare 5 secunde
+          livenessProbe:                    # când trebuie repornit containerul
+            httpGet:
+              path: /health                 # doar „procesul trăiește”, fără bază
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:                       # cât rezervă Kubernetes pentru Pod
+              cpu: 50m
+              memory: 64Mi
+            limits:                         # cât poate folosi cel mult
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service                               # adresă stabilă pentru aplicație
+metadata:
+  name: notite
+spec:
+  selector:
+    app: notite                             # trimite traficul la Pod-urile notite
+  ports:
+    - port: 80                              # portul Service-ului
+      targetPort: 8000                      # portul din Pod

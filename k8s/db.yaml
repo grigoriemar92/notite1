@@ -1,0 +1,59 @@
+apiVersion: v1                              # versiunea API pentru PersistentVolumeClaim
+kind: PersistentVolumeClaim                 # cerere de disc persistent
+metadata:
+  name: db-data                             # numele cererii (îl referă Deployment-ul)
+spec:
+  accessModes: [ReadWriteOnce]              # montat în citire/scriere de un singur nod
+  resources:
+    requests:
+      storage: 1Gi                          # 1 GiB de spațiu cerut
+---                                         # separator între obiecte, în același fișier
+apiVersion: apps/v1                         # versiunea API pentru Deployment
+kind: Deployment                            # menține Pod-urile bazei pornite
+metadata:
+  name: db
+spec:
+  replicas: 1                               # o singură instanță de bază de date
+  strategy:
+    type: Recreate                          # la actualizare oprește vechiul Pod înainte de a-l porni pe cel nou (discul nu poate fi folosit de doi)
+  selector:
+    matchLabels:
+      app: db                               # Deployment-ul gestionează Pod-urile cu eticheta app=db
+  template:                                 # șablonul Pod-urilor create
+    metadata:
+      labels:
+        app: db                             # eticheta Pod-ului (trebuie să se potrivească cu selector)
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16                # imaginea oficială PostgreSQL
+          ports:
+            - containerPort: 5432           # portul bazei
+          env:
+            - name: POSTGRES_PASSWORD       # parola utilizatorului postgres
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret           # luată din Secret-ul db-secret
+                  key: DB_PASSWORD          # cheia din Secret
+            - name: POSTGRES_DB
+              value: notite                 # creează baza „notite”, cea cerută de aplicație
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata   # subfolder: rădăcina volumului conține lost+found și blochează inițializarea
+          volumeMounts:
+            - name: data                    # volumul definit mai jos
+              mountPath: /var/lib/postgresql/data      # unde îl montează în container
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: db-data              # folosește cererea de disc de mai sus
+---
+apiVersion: v1
+kind: Service                               # adresă stabilă pentru bază
+metadata:
+  name: db                                  # numele DNS: aplicația se conectează la Host=db
+spec:
+  selector:
+    app: db                                 # trimite traficul la Pod-urile cu eticheta app=db
+  ports:
+    - port: 5432                            # portul Service-ului
+      targetPort: 5432                      # portul din Pod
