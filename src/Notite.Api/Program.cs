@@ -49,6 +49,18 @@ app.MapPost("/note", async (CreateNoteRequest request, NotesRepository repo, Can
     return Results.Created($"/note/{id}", new { id });
 });
 
+// 5. O singura notita dupa id: 404 daca nu exista.
+app.MapGet("/note/{id:int}", async (int id, NotesRepository repo, CancellationToken ct) =>
+    await repo.GetByIdAsync(id, ct) is { } note
+        ? Results.Ok(note)
+        : Results.NotFound(new { eroare = $"Notita cu id {id} nu exista." }));
+
+// 6. Stergere notita dupa id: 204 la succes, 404 daca nu exista.
+app.MapDelete("/note/{id:int}", async (int id, NotesRepository repo, CancellationToken ct) =>
+    await repo.DeleteAsync(id, ct)
+        ? Results.NoContent()
+        : Results.NotFound(new { eroare = $"Notita cu id {id} nu exista." }));
+
 app.Run();
 
 public record CreateNoteRequest(string? Text);
