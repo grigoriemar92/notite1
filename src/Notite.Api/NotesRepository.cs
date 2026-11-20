@@ -42,6 +42,27 @@ public class NotesRepository(NpgsqlDataSource dataSource)
         return notes;
     }
 
+    public async Task<Note?> GetByIdAsync(int id, CancellationToken ct)
+    {
+        await EnsureSchemaAsync(ct);
+        await using var cmd = dataSource.CreateCommand("SELECT id, text FROM note WHERE id = $1");
+        cmd.Parameters.AddWithValue(id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        return await reader.ReadAsync(ct)
+            ? new Note(reader.GetInt32(0), reader.GetString(1))
+            : null;
+    }
+
+    // Intoarce true daca notita a existat si a fost stearsa.
+    public async Task<bool> DeleteAsync(int id, CancellationToken ct)
+    {
+        await EnsureSchemaAsync(ct);
+        await using var cmd = dataSource.CreateCommand("DELETE FROM note WHERE id = $1");
+        cmd.Parameters.AddWithValue(id);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
+    }
+
     public async Task<int> CreateAsync(string text, CancellationToken ct)
     {
         await EnsureSchemaAsync(ct);
